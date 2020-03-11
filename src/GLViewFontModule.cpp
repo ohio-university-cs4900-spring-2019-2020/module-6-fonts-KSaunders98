@@ -93,6 +93,7 @@ void GLViewFontModule::updateWorld()
         //If you want to add additional functionality, do it after
         //this call.
 
+    // force nametag to always point towards the camera on the XY plane
     Vector disp = getCamera()->getPosition() - stringWO->getPosition();
     auto angle = atan2(disp.y, disp.x) + Aftr::PI / 2;
 
