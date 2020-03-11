@@ -11,14 +11,12 @@ NetMsgMacroDefinition(NetMsgUpdateCamera);
 
 NetMsgUpdateCamera::NetMsgUpdateCamera()
 {
-    id = 0;
     displayMatrix = Mat4();
     position = Vector(0, 0, 0);
 }
 
 bool NetMsgUpdateCamera::toStream(NetMessengerStreamBuffer& os) const
 {
-    os << id;
     for (size_t i = 0; i < 3; ++i) {
         for (size_t j = 0; j < 3; ++j) {
             os << displayMatrix[i * 4 + j];
@@ -31,7 +29,6 @@ bool NetMsgUpdateCamera::toStream(NetMessengerStreamBuffer& os) const
 
 bool NetMsgUpdateCamera::fromStream(NetMessengerStreamBuffer& is)
 {
-    is >> id;
     for (size_t i = 0; i < 3; ++i) {
         for (size_t j = 0; j < 3; ++j) {
             is >> displayMatrix[i * 4 + j];

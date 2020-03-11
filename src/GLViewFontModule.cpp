@@ -2,6 +2,9 @@
 
 #include "Axes.h" //We can set Axes to on/off with this
 #include "ManagerOpenGLState.h" //We can change OpenGL State attributes with this
+#include "NetMessengerClient.h"
+#include "NetMsgChatMessage.h"
+#include "NetMsgUpdateCamera.h"
 #include "PhysicsEngineODE.h"
 #include "WorldList.h" //This is where we place all of our WOs
 
@@ -90,6 +93,7 @@ void GLViewFontModule::updateWorld()
         //If you want to add additional functionality, do it after
         //this call.
 
+    // force nametag to always point towards the camera on the XY plane
     Vector disp = getCamera()->getPosition() - stringWO->getPosition();
     auto angle = atan2(disp.y, disp.x) + Aftr::PI / 2;
 
@@ -98,7 +102,11 @@ void GLViewFontModule::updateWorld()
     m = m.rotate(Vector(0, 0, 1), angle);
     stringWO->getModel()->setDisplayMatrix(m);
 
-    Vector pos = Vector();
+    // send camera update to other client
+    NetMsgUpdateCamera msg;
+    msg.displayMatrix = getCamera()->getDisplayMatrix();
+    msg.position = getCamera()->getPosition();
+    netClient->sendNetMsgSynchronousTCP(msg);
 }
 
 void GLViewFontModule::onResizeWindow(GLsizei width, GLsizei height)
@@ -131,7 +139,10 @@ void GLViewFontModule::onKeyDown(const SDL_KeyboardEvent& key)
         if (typing) {
             typing = false;
             if (!chatMessage.empty()) {
-                std::cout << "message: " << chatMessage << std::endl;
+                // send chat message to other client
+                NetMsgChatMessage msg;
+                msg.msg = chatMessage;
+                netClient->sendNetMsgSynchronousTCP(msg);
                 chatMessage = "";
             }
             chatLabel->setText("Press enter to type a message and enter again to send");
@@ -155,6 +166,15 @@ void GLViewFontModule::onKeyUp(const SDL_KeyboardEvent& key)
 
 void Aftr::GLViewFontModule::loadMap()
 {
+    std::string port = ManagerEnvironmentConfiguration::getVariableValue("NetServerListenPort");
+    if (port == "12683") {
+        netClient = std::unique_ptr<NetMessengerClient>(NetMessengerClient::New("127.0.0.1", "12682"));
+        playerString = "Player1";
+    } else {
+        netClient = std::unique_ptr<NetMessengerClient>(NetMessengerClient::New("127.0.0.1", "12683"));
+        playerString = "Player2";
+    }
+
     this->worldLst = new WorldList(); //WorldList is a 'smart' vector that is used to store WO*'s
     this->actorLst = new WorldList();
     this->netLst = new WorldList();
@@ -176,31 +196,7 @@ void Aftr::GLViewFontModule::loadMap()
 
     //SkyBox Textures readily available
     std::vector<std::string> skyBoxImageNames; //vector to store texture paths
-    //skyBoxImageNames.push_back( ManagerEnvironmentConfiguration::getSMM() + "/images/skyboxes/sky_water+6.jpg" );
-    //skyBoxImageNames.push_back( ManagerEnvironmentConfiguration::getSMM() + "/images/skyboxes/sky_dust+6.jpg" );
     skyBoxImageNames.push_back(ManagerEnvironmentConfiguration::getSMM() + "/images/skyboxes/sky_mountains+6.jpg");
-    //skyBoxImageNames.push_back( ManagerEnvironmentConfiguration::getSMM() + "/images/skyboxes/sky_winter+6.jpg" );
-    //skyBoxImageNames.push_back( ManagerEnvironmentConfiguration::getSMM() + "/images/skyboxes/early_morning+6.jpg" );
-    //skyBoxImageNames.push_back( ManagerEnvironmentConfiguration::getSMM() + "/images/skyboxes/sky_afternoon+6.jpg" );
-    //skyBoxImageNames.push_back( ManagerEnvironmentConfiguration::getSMM() + "/images/skyboxes/sky_cloudy+6.jpg" );
-    //skyBoxImageNames.push_back( ManagerEnvironmentConfiguration::getSMM() + "/images/skyboxes/sky_cloudy3+6.jpg" );
-    //skyBoxImageNames.push_back( ManagerEnvironmentConfiguration::getSMM() + "/images/skyboxes/sky_day+6.jpg" );
-    //skyBoxImageNames.push_back( ManagerEnvironmentConfiguration::getSMM() + "/images/skyboxes/sky_day2+6.jpg" );
-    //skyBoxImageNames.push_back( ManagerEnvironmentConfiguration::getSMM() + "/images/skyboxes/sky_deepsun+6.jpg" );
-    //skyBoxImageNames.push_back( ManagerEnvironmentConfiguration::getSMM() + "/images/skyboxes/sky_evening+6.jpg" );
-    //skyBoxImageNames.push_back( ManagerEnvironmentConfiguration::getSMM() + "/images/skyboxes/sky_morning+6.jpg" );
-    //skyBoxImageNames.push_back( ManagerEnvironmentConfiguration::getSMM() + "/images/skyboxes/sky_morning2+6.jpg" );
-    //skyBoxImageNames.push_back( ManagerEnvironmentConfiguration::getSMM() + "/images/skyboxes/sky_noon+6.jpg" );
-    //skyBoxImageNames.push_back( ManagerEnvironmentConfiguration::getSMM() + "/images/skyboxes/sky_warp+6.jpg" );
-    //skyBoxImageNames.push_back( ManagerEnvironmentConfiguration::getSMM() + "/images/skyboxes/space_Hubble_Nebula+6.jpg" );
-    //skyBoxImageNames.push_back( ManagerEnvironmentConfiguration::getSMM() + "/images/skyboxes/space_gray_matter+6.jpg" );
-    //skyBoxImageNames.push_back( ManagerEnvironmentConfiguration::getSMM() + "/images/skyboxes/space_easter+6.jpg" );
-    //skyBoxImageNames.push_back( ManagerEnvironmentConfiguration::getSMM() + "/images/skyboxes/space_hot_nebula+6.jpg" );
-    //skyBoxImageNames.push_back( ManagerEnvironmentConfiguration::getSMM() + "/images/skyboxes/space_ice_field+6.jpg" );
-    //skyBoxImageNames.push_back( ManagerEnvironmentConfiguration::getSMM() + "/images/skyboxes/space_lemon_lime+6.jpg" );
-    //skyBoxImageNames.push_back( ManagerEnvironmentConfiguration::getSMM() + "/images/skyboxes/space_milk_chocolate+6.jpg" );
-    //skyBoxImageNames.push_back( ManagerEnvironmentConfiguration::getSMM() + "/images/skyboxes/space_solar_bloom+6.jpg" );
-    //skyBoxImageNames.push_back( ManagerEnvironmentConfiguration::getSMM() + "/images/skyboxes/space_thick_rb+6.jpg" );
 
     float ga = 0.1f; //Global Ambient Light level for this module
     ManagerLight::setGlobalAmbientLight(aftrColor4f(ga, ga, ga, 1.0f));
@@ -233,6 +229,7 @@ void Aftr::GLViewFontModule::loadMap()
     wo->setLabel("Grass");
     worldLst->push_back(wo);
 
+    // create other player's camera model
     cameraWO = WO::New(cameraModel, Vector(0.25f, 0.25f, 0.25f), MESH_SHADING_TYPE::mstFLAT);
     cameraWO->renderOrderType = RENDER_ORDER_TYPE::roOPAQUE;
     ModelMeshSkin& skin = cameraWO->getModel()->getModelDataShared()->getModelMeshes().at(0)->getSkins().at(0);
@@ -241,20 +238,22 @@ void Aftr::GLViewFontModule::loadMap()
     skin.setSpecular(aftrColor4f(0.2f, 0.2f, 0.2f, 1.0f));
     worldLst->push_back(cameraWO);
 
+    // create other player's nametag/chat string in world space
     stringWO = WOFTGLString::New(comicSans, 30);
     stringWO->getModelT<MGLFTGLString>()->setFontColor(aftrColor4f(1.0f, 0.0f, 1.0f, 1.0f));
     stringWO->getModelT<MGLFTGLString>()->setSize(10, 3);
-    stringWO->setText("Testing123 yay!");
+    stringWO->setText(playerString);
     stringWO->setPosition(0, 0, 3);
 
     cameraWO->getChildren().push_back(stringWO);
     cameraWO->setPosition(Vector(10, 10, 10));
 
+    // create chat box in screen space
     chatLabel = WOGUILabel::New(nullptr);
     chatLabel->setText("Press enter to type a message and enter again to send");
     chatLabel->setColor(200, 200, 200);
     chatLabel->setFontSize(30);
-    chatLabel->setPosition(Vector(0.5, 0.15, 0));
+    chatLabel->setPosition(Vector(0.5f, 0.15f, 0.0f));
     chatLabel->setFontOrientation(FONT_ORIENTATION::foCENTER);
     chatLabel->setFontPath(comicSans);
     worldLst->push_back(chatLabel);
@@ -264,4 +263,9 @@ void GLViewFontModule::updateCamera(const Mat4& displayMatrix, const Vector& pos
 {
     cameraWO->getModel()->setDisplayMatrix(displayMatrix);
     cameraWO->setPosition(position);
+}
+
+void GLViewFontModule::newChatMessage(const std::string& msg)
+{
+    stringWO->setText(playerString + ": " + msg);
 }
